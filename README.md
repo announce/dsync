@@ -1,4 +1,6 @@
 # dsync
+[![Build Status](https://travis-ci.org/announce/dsync.svg?branch=master)](https://travis-ci.org/announce/dsync)
+
 Sync a given directory to Dropbox
 
 ## Usage
@@ -14,5 +16,10 @@ $ nohup python dsync.py /Volumes/sdcz43/ &
 ## Development
 
  ```bash
-pip install -r requirements.txt
+$ ./dsy init
+$ pip install -r requirements.txt
+```
+
+```bash
+$ ./dsy lint
 ```

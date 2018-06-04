@@ -9,8 +9,7 @@ function dsy () {
 
   init-dependencies () {
     local DEPENDENCIES=(
-      "docker"
-      "git"
+      "pip"
     )
     for TARGET in "${DEPENDENCIES[@]}"; do
       if [[ ! -x "$(command -v "${TARGET}")" ]]; then
