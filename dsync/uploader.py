@@ -2,10 +2,14 @@ import os
 import six
 import datetime
 import time
-import dropbox
+import pathlib
 import unicodedata
+
+import dropbox
+
 from dsync.app_error import AppError
 from dsync.logger import Logger
+from dsync.content_hasher import ContentHasher
 
 
 class Uploader:
@@ -13,6 +17,7 @@ class Uploader:
     http://dropbox-sdk-python.readthedocs.io/en/latest/moduledoc.html#module-dropbox.dropbox
     """
     CHUNK_SIZE_BYTE = 150 * 1024 * 1024
+    CH_BLOCK_BYTE = 4 * 1024 * 1024
 
     def __init__(self, target_dir, dryrun=True):
         self.logger = Logger.create(__name__)
@@ -20,6 +25,7 @@ class Uploader:
         self.target_dir = td
         self.destination = os.path.basename(td)
         self.is_dryrun = dryrun
+        self.ignore_files = self.ignore_files()
         self.client = None
 
     @classmethod
@@ -43,22 +49,16 @@ class Uploader:
 
             for name in files:
                 local_path = os.path.join(root, name)
+                if name in self.ignore_files:
+                    self.logger.info('Ignoring: %s' % local_path)
+                    break
                 name = name if isinstance(name, six.text_type) else name.decode('utf-8')
                 nname = unicodedata.normalize('NFC', name)
                 if nname in listing:
                     md = listing[nname]
-                    if self.is_synced(local_path, md):
-                        self.logger.info('%s is already synced [stats match]' % name)
-                    else:
-                        self.logger.info('%s exists with different stats, downloading' % name)
-                        res = self.download(subdir, name)
-                        with open(local_path) as f:
-                            data = f.read()
-                        if res == data:
-                            self.logger.info('%s is already synced [content match]' % name)
-                        else:
-                            self.logger.info('%s has changed since last sync' % name)
-                            self.upload(local_path, subdir, name, overwrite=True)
+                    if not self.is_synced(local_path, md):
+                        self.logger.info('%s has changed since last sync' % name)
+                        self.upload(local_path, subdir, name, overwrite=True)
                 else:
                     self.upload(local_path, subdir, name)
 
@@ -68,10 +68,41 @@ class Uploader:
         return datetime.datetime(*time.gmtime(mtime)[:6])
 
     @classmethod
-    def is_synced(cls, local_path, md):
-        mtime_dt = cls.normalized_mtime(local_path)
+    def ignore_files(cls):
+        with pathlib.Path(
+            pathlib.Path(__file__).parent,
+            'ignore.csv'
+        ).open() as fd:
+            return fd.readlines()
+
+    def is_synced(self, local_path, md):
+        mtime_dt = self.normalized_mtime(local_path)
         size = os.path.getsize(local_path)
-        return isinstance(md, dropbox.files.FileMetadata) and mtime_dt == md.client_modified and size == md.size
+        self.logger.info('%r' % md)
+        stat_eq = isinstance(md, dropbox.files.FileMetadata) and mtime_dt == md.client_modified and size == md.size
+        if stat_eq:
+            self.logger.info('Statically same (mtime_dt: %s, size: %s)' % (mtime_dt, size))
+            return True
+        else:
+            ch = self.content_hash(local_path)
+            self.logger.info('[%s] content_hash: %s' % (
+                'matched' if ch == md.content_hash else 'not matched',
+                ch,
+            ))
+            return ch == md.content_hash
+
+    def content_hash(self, local_path):
+        """
+        https://www.dropbox.com/developers/reference/content-hash
+        """
+        hasher = ContentHasher()
+        with open(local_path, 'rb') as fd:
+            while True:
+                chunk = fd.read(self.CH_BLOCK_BYTE)
+                if len(chunk) == 0:
+                    break
+                hasher.update(chunk)
+        return hasher.hexdigest()
 
     @classmethod
     def remove_redundant_separator(cls, destination, subdir, name=''):
@@ -106,7 +137,7 @@ class Uploader:
             self.logger.info('HttpError: %s', err)
             return None
         data = res.content
-        self.logger.info('%d bytes; md: %s', len(data), md)
+        self.logger.info('Downloaded %d bytes; md: %s', len(data), md)
         return data
 
     def upload(self, local_path, subdir, name, overwrite=False):
