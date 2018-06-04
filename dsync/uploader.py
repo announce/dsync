@@ -12,7 +12,7 @@ class Uploader:
     """
     http://dropbox-sdk-python.readthedocs.io/en/latest/moduledoc.html#module-dropbox.dropbox
     """
-    CHUNK_SIZE_BYTE = 150*1024*1024
+    CHUNK_SIZE_BYTE = 150 * 1024 * 1024
 
     def __init__(self, target_dir, dryrun=True):
         self.logger = Logger.create(__name__)

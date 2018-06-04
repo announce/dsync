@@ -18,7 +18,7 @@ class Timer:
     def __str__(self):
         current_time = datetime.now()
         delta = (self.stopped_at - self.started_at) if (
-          isinstance(self.started_at, datetime) and isinstance(self.stopped_at, datetime)
+            isinstance(self.started_at, datetime) and isinstance(self.stopped_at, datetime)
         ) else (current_time - self.started_at)
         return json.dumps({
             'started_at': self.started_at.isoformat() if isinstance(self.started_at, datetime) else None,

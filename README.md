@@ -10,3 +10,9 @@ Sync a given directory to Dropbox
 $ export DSYNC_ACCESS_TOKEN="..."
 $ nohup python dsync.py /Volumes/sdcz43/ &
 ```
+
+## Development
+
+ ```bash
+pip install -r requirements.txt
+```
