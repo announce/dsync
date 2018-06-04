@@ -1,8 +1,10 @@
 # https://docs.travis-ci.com/user/languages/python/
+sudo: required
+services:
+    - docker
 language: python
 python:
   - "3.6"
-  - "pypy3.6"
 script:
   - ./dsy lint
   - ./dsy run
