@@ -145,7 +145,7 @@ class Uploader:
         mode = (dropbox.files.WriteMode.overwrite
                 if overwrite
                 else dropbox.files.WriteMode.add)
-        self.logger.info('mode: %s, dryrun: %s, local: %s, remote: %s' % (
+        self.logger.info('Trying to upload (mode: %s, dryrun: %s, local: %s, remote: %s)' % (
             mode,
             self.is_dryrun,
             local_path,
@@ -157,8 +157,7 @@ class Uploader:
         except dropbox.exceptions.ApiError as err:
             self.logger.warn('%s' % err)
             return None
-        self.logger.info('Uploaded as %s' % result.name.encode('utf8'))
-        self.logger.info('%r', result)
+        self.logger.info('Uploaded %r' % result)
         return result
 
     def upload_file(self, local_path, remote_path, mode):
