@@ -16,7 +16,7 @@ $ tail -f nohup.out # Too see the log
 
 ## Motivation
 * Why not use an official client?
-  * Because there’s no official way to upload files stored in external device such as USB memory (in my case it's `/Volumes/sdcz43/`).
+  * Because there’s no official way to upload files stored in external device such as USB memory (in my case it's `/Volumes/sdcz43`).
 
 ## Installation
 

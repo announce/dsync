@@ -4,6 +4,7 @@ import datetime
 import time
 from pathlib import Path
 import unicodedata
+import concurrent.futures
 
 import dropbox
 
@@ -16,7 +17,7 @@ class Uploader:
     """
     http://dropbox-sdk-python.readthedocs.io/en/latest/moduledoc.html#module-dropbox.dropbox
     """
-    CHUNK_SIZE_BYTE = 150 * 1024 * 1024
+    CHUNK_SIZE_BYTE = 100 * 1024 * 1024
     CH_BLOCK_BYTE = 4 * 1024 * 1024
 
     def __init__(self, target_dir, dryrun=True):
@@ -27,6 +28,7 @@ class Uploader:
         self.is_dryrun = dryrun
         self.ignore_files = self.ignore_files()
         self.client = None
+        self.queued_futures = []
 
     @classmethod
     def validate(cls, target_dir):
@@ -42,25 +44,45 @@ class Uploader:
         return self
 
     def walk(self):
-        for root, dirs, files in os.walk(self.target_dir):
-            subdir = root[len(self.target_dir):].strip(os.path.sep)
-            listing = self.list_folder(subdir=subdir)
-            self.logger.info('Descending into %s...' % subdir)
+        with concurrent.futures.ThreadPoolExecutor(thread_name_prefix=__name__) as executor:
+            for root, dirs, files in os.walk(self.target_dir):
+                subdir = root[len(self.target_dir):].strip(os.path.sep)
+                if any([part in self.ignore_files for part in subdir.split(os.path.sep)]):
+                    self.logger.debug('Ignoring: %s' % subdir)
+                    continue
+                listing = self.list_folder(subdir=subdir)
+                self.logger.debug('Descending into %s ...' % subdir)
+                for name in files:
+                    local_path = os.path.join(root, name)
+                    future = executor.submit(
+                        fn=self.task,
+                        local_path=local_path,
+                        subdir=subdir,
+                        name=name,
+                        listing=listing,
+                    )
+                    self.queued_futures.append(future)
 
-            for name in files:
-                local_path = os.path.join(root, name)
-                if any([part in self.ignore_files for part in local_path.split(os.path.sep)]):
-                    self.logger.info('Ignoring: %s' % local_path)
-                    break
-                name = name if isinstance(name, six.text_type) else name.decode('utf-8')
-                nname = unicodedata.normalize('NFC', name)
-                if nname in listing:
-                    md = listing[nname]
-                    if not self.is_synced(local_path, md):
-                        self.logger.info('%s has changed since last sync' % name)
-                        self.upload(local_path, subdir, name, overwrite=True)
-                else:
-                    self.upload(local_path, subdir, name)
+            self.logger.info('Submitted %d task(s)' % len(self.queued_futures))
+            for future in concurrent.futures.as_completed(self.queued_futures):
+                try:
+                    future.result()
+                except Exception as exc:
+                    self.logger.error('An unhandled exception: %s' % exc)
+
+    def task(self, local_path, subdir, name, listing):
+        if any([part in self.ignore_files for part in local_path.split(os.path.sep)]):
+            self.logger.debug('Ignoring: %s' % local_path)
+            return None
+        name = name if isinstance(name, six.text_type) else name.decode('utf-8')
+        nname = unicodedata.normalize('NFC', name)
+        if nname in listing:
+            md = listing[nname]
+            if not self.is_synced(local_path, md):
+                self.logger.debug('Changed since last sync: %s' % local_path)
+                self.upload(local_path, subdir, name, overwrite=True)
+        else:
+            self.upload(local_path, subdir, name)
 
     @classmethod
     def normalized_mtime(cls, local_path):
@@ -75,15 +97,19 @@ class Uploader:
     def is_synced(self, local_path, md):
         mtime_dt = self.normalized_mtime(local_path)
         size = os.path.getsize(local_path)
-        self.logger.info('%r' % md)
         stat_eq = isinstance(md, dropbox.files.FileMetadata) and mtime_dt == md.client_modified and size == md.size
         if stat_eq:
-            self.logger.info('Statically same (mtime_dt: %s, size: %s)' % (mtime_dt, size))
+            self.logger.debug('Meta data are matched (mtime_dt: %s, size: %s, local_path: %s)' % (
+                mtime_dt,
+                size,
+                local_path,
+            ))
             return True
         else:
             ch = self.content_hash(local_path)
-            self.logger.info('[%s] content_hash: %s' % (
+            self.logger.debug('[%s] content_hash: (%s, %s)' % (
                 'matched' if ch == md.content_hash else 'not matched',
+                local_path,
                 ch,
             ))
             return ch == md.content_hash
@@ -131,10 +157,10 @@ class Uploader:
         try:
             md, res = self.client.files_download(remote_path)
         except dropbox.exceptions.HttpError as err:
-            self.logger.info('HttpError: %s', err)
+            self.logger.warn('HttpError: %s', err)
             return None
         data = res.content
-        self.logger.info('Downloaded %d bytes; md: %s', len(data), md)
+        self.logger.debug('Downloaded %d bytes; md: %s', len(data), md)
         return data
 
     def upload(self, local_path, subdir, name, overwrite=False):
@@ -145,19 +171,19 @@ class Uploader:
         mode = (dropbox.files.WriteMode.overwrite
                 if overwrite
                 else dropbox.files.WriteMode.add)
-        self.logger.info('Trying to upload (mode: %s, dryrun: %s, local: %s, remote: %s)' % (
-            mode,
-            self.is_dryrun,
-            local_path,
-            remote_path))
         if self.is_dryrun:
+            self.logger.info('[dryrun] Skipping target file (mode: %s, dryrun: %s, local: %s, remote: %s)' % (
+                mode,
+                self.is_dryrun,
+                local_path,
+                remote_path))
             return None
         try:
             result = self.upload_file(local_path, remote_path, mode)
-        except dropbox.exceptions.ApiError as err:
-            self.logger.warn('%s' % err)
+        except dropbox.exceptions.DropboxException as err:
+            self.logger.error('%r' % err)
             return None
-        self.logger.info('Uploaded %r' % result)
+        self.logger.debug('Uploaded %r' % result)
         return result
 
     def upload_file(self, local_path, remote_path, mode):
@@ -178,14 +204,19 @@ class Uploader:
         cursor = dropbox.files.UploadSessionCursor(session.session_id, offset=fd.tell())
         commit = dropbox.files.CommitInfo(path=remote_path, autorename=True)
         ideal_iteration = stat.st_size // self.CHUNK_SIZE_BYTE
-        while (fd.tell() < stat.st_size) or tried < ideal_iteration * 2:
+        while (fd.tell() < stat.st_size) and (tried < ideal_iteration * 2):
             tried += 1
-            self.logger.info('[#%s/%d] Sending chunk to %s' % (tried, ideal_iteration, remote_path))
             if (stat.st_size - fd.tell()) > self.CHUNK_SIZE_BYTE:
-                self.logger.info('Appending file: cusor.offset=%d, fd is at %d' % (cursor.offset, fd.tell()))
+                self.logger.info('[#%s/%d] Appending file: (cursor.offset=%d, fd=%d, remote_path=%s)' % (
+                    tried,
+                    ideal_iteration,
+                    cursor.offset,
+                    fd.tell(),
+                    remote_path,
+                ))
                 self.client.files_upload_session_append_v2(fd.read(self.CHUNK_SIZE_BYTE), cursor)
                 cursor.offset = fd.tell()
             else:
-                self.logger.info('Finishing transfer and committing')
+                self.logger.info('Finishing transfer and committing %s' % remote_path)
                 self.client.files_upload_session_finish(fd.read(self.CHUNK_SIZE_BYTE), cursor, commit)
         return commit

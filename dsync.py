@@ -10,8 +10,9 @@ from dsync.auth import Auth
 
 class Dsync:
     def __init__(self, args):
-        self.logger = Logger.create(name=__name__)
         self.timer = Timer().start()
+        self.args = args
+        self.logger = Logger.create(name=__name__)
         self.uploader = Uploader(
             target_dir=args.directory,
             dryrun=args.dryrun
@@ -19,7 +20,10 @@ class Dsync:
         self.auth = Auth(access_token=args.token)
 
     def execute(self):
-        self.logger.info('Started.')
+        self.logger.info('Started with %s %s' % (
+            self.args.directory,
+            '[dryrun]' if self.args.dryrun else '',
+        ))
         self.uploader.ensure_client(
             token=self.auth.ensure_token()
         ).walk()

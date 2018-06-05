@@ -7,12 +7,12 @@ class Timer:
         self.started_at = None
         self.stopped_at = None
 
-    def start(self, started_at=datetime.now()):
-        self.started_at = started_at
+    def start(self, started_at=None):
+        self.started_at = datetime.now() if started_at is None else started_at
         return self
 
-    def stop(self, stopped_at=datetime.now()):
-        self.stopped_at = stopped_at
+    def stop(self, stopped_at=None):
+        self.stopped_at = datetime.now() if stopped_at is None else stopped_at
         return self
 
     def __str__(self):
@@ -23,7 +23,7 @@ class Timer:
         return json.dumps({
             'started_at': self.started_at.isoformat() if isinstance(self.started_at, datetime) else None,
             'stopped_at': self.stopped_at.isoformat() if isinstance(self.stopped_at, datetime) else None,
-            'total_seconds': delta.total_seconds(),
+            'total_seconds': '%s' % delta,
         })
 
 
