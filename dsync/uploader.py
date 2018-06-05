@@ -2,7 +2,7 @@ import os
 import six
 import datetime
 import time
-import pathlib
+from pathlib import Path
 import unicodedata
 
 import dropbox
@@ -49,7 +49,7 @@ class Uploader:
 
             for name in files:
                 local_path = os.path.join(root, name)
-                if name in self.ignore_files:
+                if any([part in self.ignore_files for part in local_path.split(os.path.sep)]):
                     self.logger.info('Ignoring: %s' % local_path)
                     break
                 name = name if isinstance(name, six.text_type) else name.decode('utf-8')
@@ -69,11 +69,8 @@ class Uploader:
 
     @classmethod
     def ignore_files(cls):
-        with pathlib.Path(
-            pathlib.Path(__file__).parent,
-            'ignore.csv'
-        ).open() as fd:
-            return fd.readlines()
+        with Path(Path(__file__).parent, 'ignore.csv').open() as fd:
+            return [line.strip() for line in fd.readlines()]
 
     def is_synced(self, local_path, md):
         mtime_dt = self.normalized_mtime(local_path)
@@ -158,7 +155,7 @@ class Uploader:
         try:
             result = self.upload_file(local_path, remote_path, mode)
         except dropbox.exceptions.ApiError as err:
-            self.logger.warn('API error %s' % err)
+            self.logger.warn('%s' % err)
             return None
         self.logger.info('Uploaded as %s' % result.name.encode('utf8'))
         self.logger.info('%r', result)
