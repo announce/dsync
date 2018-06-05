@@ -10,12 +10,13 @@ Sync a given directory to Dropbox
 
 ```bash
 $ export DSYNC_ACCESS_TOKEN="..."
-$ nohup python dsync.py /Volumes/sdcz43/ &
+$ nohup python dsync.py __PATH_TO_YOUR_TARGET_DIR__ &
+$ tail -f nohup.out # Too see the log
 ```
 
 ## Motivation
 * Why not use an official client?
-  * Because there’s no official way to upload files stored in external device such as USB memory.
+  * Because there’s no official way to upload files stored in external device such as USB memory (in my case it's `/Volumes/sdcz43/`).
 
 ## Installation
 
