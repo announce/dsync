@@ -7,6 +7,7 @@ import unicodedata
 import concurrent.futures
 
 import dropbox
+import humanfriendly
 
 from dsync.app_error import AppError
 from dsync.logger import Logger
@@ -18,13 +19,15 @@ class Uploader:
     http://dropbox-sdk-python.readthedocs.io/en/latest/moduledoc.html#module-dropbox.dropbox
     """
     CHUNK_SIZE_BYTE = 100 * 1024 * 1024
+    MAX_SIZE_BYTE = 350 * 1024 * 1024 * 1024
     CH_BLOCK_BYTE = 4 * 1024 * 1024
 
-    def __init__(self, target_dir, dryrun=True):
+    def __init__(self, target_dir, chunk_size=CHUNK_SIZE_BYTE, dryrun=True):
         self.logger = Logger.create(__name__)
         td = self.validate(target_dir)
         self.target_dir = td
         self.destination = os.path.basename(td)
+        self.chunk_size = humanfriendly.parse_size(chunk_size)
         self.is_dryrun = dryrun
         self.ignore_files = self.ignore_files()
         self.client = None
@@ -189,24 +192,33 @@ class Uploader:
     def upload_file(self, local_path, remote_path, mode):
         with open(local_path, 'rb') as fd:
             stat = os.stat(local_path)
-            if stat.st_size < self.CHUNK_SIZE_BYTE:
+            if self.MAX_SIZE_BYTE < stat.st_size:
+                self.logger.info('Ignoring %s (exceeding the maximum limit size: %s)' % (
+                    local_path,
+                    humanfriendly.format_size(self.MAX_SIZE_BYTE, binary=True)))
+                return None
+            elif stat.st_size < self.chunk_size:
                 return self.client.files_upload(
                     fd.read(), remote_path, mode,
                     client_modified=self.normalized_mtime(local_path),
                     autorename=True,
                     mute=True)
             else:
-                return self.upload_large_file(fd=fd, remote_path=remote_path, stat=stat)
+                return self.upload_large_file(
+                    fd=fd,
+                    remote_path=remote_path,
+                    stat=stat,
+                    mode=mode)
 
-    def upload_large_file(self, fd, remote_path, stat):
+    def upload_large_file(self, fd, remote_path, stat, mode):
         tried = 0
-        session = self.client.files_upload_session_start(fd.read(self.CHUNK_SIZE_BYTE))
+        session = self.client.files_upload_session_start(fd.read(self.chunk_size))
         cursor = dropbox.files.UploadSessionCursor(session.session_id, offset=fd.tell())
-        commit = dropbox.files.CommitInfo(path=remote_path, autorename=True)
-        ideal_iteration = stat.st_size // self.CHUNK_SIZE_BYTE
+        commit = dropbox.files.CommitInfo(path=remote_path, autorename=True, mode=mode)
+        ideal_iteration = stat.st_size // self.chunk_size
         while (fd.tell() < stat.st_size) and (tried < ideal_iteration * 2):
             tried += 1
-            if (stat.st_size - fd.tell()) > self.CHUNK_SIZE_BYTE:
+            if (stat.st_size - fd.tell()) > self.chunk_size:
                 self.logger.info('[#%s/%d] Appending file: (cursor.offset=%d, fd=%d, remote_path=%s)' % (
                     tried,
                     ideal_iteration,
@@ -214,9 +226,9 @@ class Uploader:
                     fd.tell(),
                     remote_path,
                 ))
-                self.client.files_upload_session_append_v2(fd.read(self.CHUNK_SIZE_BYTE), cursor)
+                self.client.files_upload_session_append_v2(fd.read(self.chunk_size), cursor)
                 cursor.offset = fd.tell()
             else:
                 self.logger.info('Finishing transfer and committing %s' % remote_path)
-                self.client.files_upload_session_finish(fd.read(self.CHUNK_SIZE_BYTE), cursor, commit)
+                self.client.files_upload_session_finish(fd.read(self.chunk_size), cursor, commit)
         return commit

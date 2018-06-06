@@ -1,7 +1,7 @@
 """
 
 """
-from argparse import ArgumentParser
+from dsync.arguments import Arguments
 from dsync.logger import Logger
 from dsync.timer import Timer
 from dsync.uploader import Uploader
@@ -12,12 +12,14 @@ class Dsync:
     def __init__(self, args):
         self.timer = Timer().start()
         self.args = args
-        self.logger = Logger.create(name=__name__, level=args.log_level)
+        self.logger = Logger.create(
+            name=__name__,
+            level=args.log_level)
         self.uploader = Uploader(
             target_dir=args.directory,
-            dryrun=args.dryrun
-        )
-        self.auth = Auth(access_token=args.token)
+            chunk_size=args.chunk_size,
+            dryrun=args.dryrun)
+        self.auth = Auth(access_token=args.access_token)
 
     def execute(self):
         self.logger.info('Started with %s %s' % (
@@ -35,35 +37,4 @@ class Dsync:
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description=u'dsync -- Sync a given directory to Dropbox')
-    parser.add_argument(
-        'directory',
-        help='Local directory to upload')
-    # @TODO https://pypi.org/project/python-daemon/
-    # parser.add_argument(
-    #     '-d',
-    #     '--daemon',
-    #     action='store_true',
-    #     help='Run as daemon to watch target directory')
-    parser.add_argument(
-        '-n',
-        '--dryrun',
-        action='store_true',
-        help='List up target files as noop')
-    parser.add_argument(
-        '-l',
-        '--log-level',
-        choices=Logger.available_levels(),
-        default=Logger.AVAILABLE_LEVEL.get('INFO'),
-        help='Choose log levels from %r. Default is %s.' % (Logger.AVAILABLE_LEVEL,
-                                                            Logger.AVAILABLE_LEVEL.get('INFO')))
-    parser.add_argument(
-        '-t',
-        '--token',
-        type=str,
-        help=' '.join([
-            'Access token',
-            '(see https://www.dropbox.com/developers/apps).',
-            'You also can specify by the environment valuable \'DSYNC_ACCESS_TOKEN\''])
-    )
-    Dsync(args=parser.parse_args()).execute().exit()
+    Dsync(args=Arguments.create().parse()).execute().exit()
