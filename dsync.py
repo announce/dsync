@@ -12,7 +12,7 @@ class Dsync:
     def __init__(self, args):
         self.timer = Timer().start()
         self.args = args
-        self.logger = Logger.create(name=__name__)
+        self.logger = Logger.create(name=__name__, level=args.log_level)
         self.uploader = Uploader(
             target_dir=args.directory,
             dryrun=args.dryrun
@@ -30,7 +30,7 @@ class Dsync:
         return self
 
     def exit(self):
-        self.logger.info('Exiting at %s' % self.timer.stop())
+        self.logger.info('Exiting %s' % self.timer.stop())
         return self
 
 
@@ -50,6 +50,13 @@ if __name__ == '__main__':
         '--dryrun',
         action='store_true',
         help='List up target files as noop')
+    parser.add_argument(
+        '-l',
+        '--log-level',
+        choices=Logger.available_levels(),
+        default=Logger.AVAILABLE_LEVEL.get('INFO'),
+        help='Choose log levels from %r. Default is %s.' % (Logger.AVAILABLE_LEVEL,
+                                                            Logger.AVAILABLE_LEVEL.get('INFO')))
     parser.add_argument(
         '-t',
         '--token',

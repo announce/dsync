@@ -51,7 +51,7 @@ class Uploader:
                     self.logger.debug('Ignoring: %s' % subdir)
                     continue
                 listing = self.list_folder(subdir=subdir)
-                self.logger.debug('Descending into %s ...' % subdir)
+                self.logger.info('Descending into %s ...' % subdir)
                 for name in files:
                     local_path = os.path.join(root, name)
                     future = executor.submit(
@@ -63,7 +63,7 @@ class Uploader:
                     )
                     self.queued_futures.append(future)
 
-            self.logger.info('Submitted %d task(s)' % len(self.queued_futures))
+            self.logger.debug('Submitted %d task(s)' % len(self.queued_futures))
             for future in concurrent.futures.as_completed(self.queued_futures):
                 try:
                     future.result()
