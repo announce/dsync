@@ -22,14 +22,20 @@ class Uploader:
     MAX_SIZE_BYTE = 350 * 1024 * 1024 * 1024
     CH_BLOCK_BYTE = 4 * 1024 * 1024
 
-    def __init__(self, target_dir, chunk_size=CHUNK_SIZE_BYTE, dryrun=True):
+    def __init__(self, target_dir, chunk_size=CHUNK_SIZE_BYTE, custom_ignore=None, dryrun=True):
+        """
+        :type target_dir: str
+        :type chunk_size: int|str
+        :type custom_ignore: str
+        :type dryrun: bool
+        """
         self.logger = Logger.create(__name__)
         td = self.validate(target_dir)
         self.target_dir = td
         self.destination = os.path.basename(td)
-        self.chunk_size = humanfriendly.parse_size(chunk_size)
+        self.chunk_size = humanfriendly.parse_size(chunk_size) if isinstance(chunk_size, str) else chunk_size
         self.is_dryrun = dryrun
-        self.ignore_files = self.ignore_files()
+        self.ignoring_files = self.ignoring_files(custom_ignore)
         self.client = None
         self.queued_futures = []
 
@@ -50,7 +56,7 @@ class Uploader:
         with concurrent.futures.ThreadPoolExecutor(thread_name_prefix=__name__) as executor:
             for root, dirs, files in os.walk(self.target_dir):
                 subdir = root[len(self.target_dir):].strip(os.path.sep)
-                if any([part in self.ignore_files for part in subdir.split(os.path.sep)]):
+                if any([part in self.ignoring_files for part in subdir.split(os.path.sep)]):
                     self.logger.debug('Ignoring: %s' % subdir)
                     continue
                 listing = self.list_folder(subdir=subdir)
@@ -74,7 +80,7 @@ class Uploader:
                     self.logger.error('An unhandled exception: %s' % exc)
 
     def task(self, local_path, subdir, name, listing):
-        if any([part in self.ignore_files for part in local_path.split(os.path.sep)]):
+        if any([part in self.ignoring_files for part in local_path.split(os.path.sep)]):
             self.logger.debug('Ignoring: %s' % local_path)
             return None
         name = name if isinstance(name, six.text_type) else name.decode('utf-8')
@@ -93,8 +99,11 @@ class Uploader:
         return datetime.datetime(*time.gmtime(mtime)[:6])
 
     @classmethod
-    def ignore_files(cls):
-        with Path(Path(__file__).parent, 'ignore.csv').open() as fd:
+    def ignoring_files(cls, custom_path=None):
+        if not (custom_path is None or os.path.isabs(custom_path)):
+            raise AppError('Please specify ignore file in absolute path')
+        p = Path(Path(__file__).parent, 'ignore.txt') if custom_path is None else Path(custom_path)
+        with Path(p).open() as fd:
             return [line.strip() for line in fd.readlines()]
 
     def is_synced(self, local_path, md):

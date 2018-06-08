@@ -39,6 +39,10 @@ class Arguments:
                 Logger.AVAILABLE_LEVEL,
                 Logger.AVAILABLE_LEVEL.get('INFO')))
         parser.add_argument(
+            '-i',
+            '--ignore',
+            help='Specify path to configuration file')
+        parser.add_argument(
             '-s',
             '--chunk-size',
             default=Uploader.CHUNK_SIZE_BYTE,

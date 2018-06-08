@@ -18,6 +18,7 @@ class Dsync:
         self.uploader = Uploader(
             target_dir=args.directory,
             chunk_size=args.chunk_size,
+            custom_ignore=args.ignore,
             dryrun=args.dryrun)
         self.auth = Auth(access_token=args.access_token)
 
