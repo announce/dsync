@@ -5,13 +5,12 @@ Sync a given directory to Dropbox
 
 ## Usage
 
-1. Access token is available at [App Console](https://www.dropbox.com/developers/apps/) in Dropbox Developer site
-1. Upload your target directory
+1. Create an app at [App Console](https://www.dropbox.com/developers/apps/) and retrieve an access token
+1. Execute the script like below to upload your target directory:
 
 ```bash
-$ export DSYNC_ACCESS_TOKEN="..."
-$ nohup python dsync.py __PATH_TO_YOUR_TARGET_DIR__ &
-$ tail -f nohup.out # Too see the log
+$ export DSYNC_ACCESS_TOKEN="__YOUR_ACCESS_TOKEN_HERE__"
+$ python dsync.py ~/Desktop/example-directory
 ```
 
 ## Motivation
