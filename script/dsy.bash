@@ -4,7 +4,8 @@ function dsy () {
   set -u
 
   init () {
-    init-dependencies
+    init-dependencies \
+    && init-pip
   }
 
   init-dependencies () {
@@ -16,6 +17,10 @@ function dsy () {
         error "Install ${TARGET}."
       fi
     done
+  }
+
+  init-pip () {
+    pip install -r requirements.txt
   }
 
   lint () {

@@ -21,7 +21,6 @@ $ python dsync.py ~/Desktop/example-directory
 
  ```bash
 $ ./dsy init
-$ pip install -r requirements.txt
 ```
 
 ## Development
