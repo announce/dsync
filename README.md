@@ -1,7 +1,7 @@
 # dsync
 [![Build Status](https://travis-ci.org/announce/dsync.svg?branch=master)](https://travis-ci.org/announce/dsync)
 
-Sync a given directory to Dropbox
+A CLI tool for one-way sync of a given directory towards Dropbox
 
 ## Usage
 
